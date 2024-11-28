@@ -48,10 +48,72 @@
 # Renombre la columna "default payment next month" a "default"
 # y remueva la columna "ID".
 #
+
+# Carga de librerias
+import pandas as pd 
+from sklearn.model_selection import GridSearchCV 
+from sklearn.compose import ColumnTransformer 
+from sklearn.pipeline import Pipeline 
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler 
+from sklearn.linear_model import LogisticRegression
+from sklearn.feature_selection import SelectKBest, f_classif
+import pickle
+import numpy as np
+
+# Carga de datos
+train_data_zip = 'files/input/train_data.csv.zip'
+test_data_zip = 'files/input/test_data.csv.zip'
+
+# Extraccion de los datos de los archivos zip
+train_data=pd.read_csv(
+    train_data_zip,
+    index_col=False,
+    compression='zip')
+
+test_data=pd.read_csv(
+    test_data_zip,
+    index_col=False,
+    compression='zip')
+
+# Renombrar la columna "default payment next month" a "default"
+train_data.rename(columns={'default payment next month': 'default'}, inplace=True)
+test_data.rename(columns={'default payment next month': 'default'}, inplace=True)
+
+# Remover la columna "ID"
+train_data.drop(columns='ID', inplace=True)
+test_data.drop(columns='ID', inplace=True)
+
+# Recodificar la variable EDUCATION: 0 es "NaN"
+train_data['EDUCATION'] = train_data['EDUCATION'].replace(0, np.nan)
+test_data['EDUCATION'] = test_data['EDUCATION'].replace(0, np.nan)
+
+# Recodificar la variable MARRIAGE: 0 es "NaN"
+
+train_data['MARRIAGE'] = train_data['MARRIAGE'].replace(0, np.nan)
+test_data['MARRIAGE'] = test_data['MARRIAGE'].replace(0, np.nan)
+
+# Eliminar los registros con informacion no disponible (es decir, con al menos una columna con valor nulo)
+train_data.dropna(inplace=True)
+test_data.dropna(inplace=True)
+
+# Agrupar los valores de EDUCATION > 4 en la categoria "others"
+train_data.loc[train_data['EDUCATION'] > 4, 'EDUCATION'] = 4
+test_data.loc[test_data['EDUCATION'] > 4, 'EDUCATION'] = 4
+
 #
 # Paso 2.
 # Divida los datasets en x_train, y_train, x_test, y_test.
 #
+
+x_train = train_data.drop(columns='default')
+y_train = train_data['default']
+# Separar las variables categoricas
+x_train_cat = x_train.select_dtypes(include='category')
+x_train_num = x_train.select_dtypes(exclude='category')
+
+x_test = test_data.drop(columns='default')
+y_test = test_data['default']
+
 #
 # Paso 3.
 # Cree un pipeline para el modelo de clasificación. Este pipeline debe
@@ -63,15 +125,55 @@
 # - Ajusta un modelo de regresion logistica.
 #
 #
+
+cat_transformer = Pipeline(steps=[
+    ('encoder', OneHotEncoder(drop='first', handle_unknown='ignore'))
+])
+
+num_transformer = Pipeline(steps=[
+    ('scaler', MinMaxScaler())
+])
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', num_transformer, x_train_num.columns),
+        ('cat', cat_transformer, x_train_cat.columns)
+    ]
+)
+
+pipeline = Pipeline([
+    ('preprocessor', preprocessor),
+    ('select_k_best', SelectKBest(f_classif)),
+    ('model', LogisticRegression())
+])
+
 # Paso 4.
 # Optimice los hiperparametros del pipeline usando validación cruzada.
 # Use 10 splits para la validación cruzada. Use la función de precision
 # balanceada para medir la precisión del modelo.
 #
 #
+
+param_grid = {
+    'model__C': [0.1, 1, 10,100],
+    'model__max_iter': [1000, 2000, 3000],
+    'model__solver': ['lbfgs', 'liblinear','saga'],
+    # 'model__penalty': ['l1', 'l2'],
+    'model__class_weight': ['balanced', None],
+    'select_k_best__k': [5, 10, 15, 20, 23]
+}
+
+model = GridSearchCV(pipeline, param_grid, cv=10, scoring='balanced_accuracy')
+
+model.fit(x_train, y_train)
+
 # Paso 5.
 # Salve el modelo como "files/models/model.pkl".
 #
+
+with open('files/models/model.pkl', 'wb') as f:
+    pickle.dump(model, f)
+
 #
 # Paso 6.
 # Calcule las metricas de precision, precision balanceada, recall,
@@ -84,6 +186,35 @@
 # {'type': 'metrics', 'dataset': 'train', 'precision': 0.8, 'balanced_accuracy': 0.7, 'recall': 0.9, 'f1_score': 0.85}
 # {'type': 'metrics', 'dataset': 'test', 'precision': 0.7, 'balanced_accuracy': 0.6, 'recall': 0.8, 'f1_score': 0.75}
 #
+
+with open('files/models/model.pkl', 'rb') as f:
+    model = pickle.load(f)
+
+# Calculo las metricas
+from sklearn.metrics import precision_score, balanced_accuracy_score, recall_score, f1_score, confusion_matrix
+
+y_train_pred = model.predict(x_train)
+y_test_pred = model.predict(x_test)
+
+metrics_train = {
+    'type': 'metrics',
+    'dataset': 'train',
+    'precision': precision_score(y_train, y_train_pred),
+    'balanced_accuracy': balanced_accuracy_score(y_train, y_train_pred),
+    'recall': recall_score(y_train, y_train_pred),
+    'f1_score': f1_score(y_train, y_train_pred)
+}
+
+metrics_test = {
+    'type': 'metrics',
+    'dataset': 'test',
+    'precision': precision_score(y_test, y_test_pred),
+    'balanced_accuracy': balanced_accuracy_score(y_test, y_test_pred),
+    'recall': recall_score(y_test, y_test_pred),
+    'f1_score': f1_score(y_test, y_test_pred)
+}
+
+
 #
 # Paso 7.
 # Calcule las matrices de confusion para los conjuntos de entrenamiento y
@@ -94,3 +225,24 @@
 # {'type': 'cm_matrix', 'dataset': 'train', 'true_0': {"predicted_0": 15562, "predicte_1": 666}, 'true_1': {"predicted_0": 3333, "predicted_1": 1444}}
 # {'type': 'cm_matrix', 'dataset': 'test', 'true_0': {"predicted_0": 15562, "predicte_1": 650}, 'true_1': {"predicted_0": 2490, "predicted_1": 1420}}
 #
+
+cm_train = confusion_matrix(y_train, y_train_pred)
+cm_test = confusion_matrix(y_test, y_test_pred)
+
+cm_matrix_train = {
+    'type': 'cm_matrix',
+    'dataset': 'train',
+    'true_0': {"predicted_0": cm_train[0, 0], "predicted_1": cm_train[0, 1]},
+    'true_1': {"predicted_0": cm_train[1, 0], "predicted_1": cm_train[1, 1]}
+}
+
+cm_matrix_test = {
+    'type': 'cm_matrix',
+    'dataset': 'test',
+    'true_0': {"predicted_0": cm_test[0, 0], "predicted_1": cm_test[0, 1]},
+    'true_1': {"predicted_0": cm_test[1, 0], "predicted_1": cm_test[1, 1]}
+}
+
+# Guardar las metricas
+metrics = [metrics_train, metrics_test, cm_matrix_train, cm_matrix_test]
+pd.DataFrame(metrics).to_json('files/output/metrics.json', orient='records', lines=True)
