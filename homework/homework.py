@@ -100,6 +100,14 @@ test_data.dropna(inplace=True)
 train_data.loc[train_data['EDUCATION'] > 4, 'EDUCATION'] = 4
 test_data.loc[test_data['EDUCATION'] > 4, 'EDUCATION'] = 4
 
+# Reclasificar las variables EDUCATION, SEX y MARRIAGE a categoricas
+
+cat_columns = ['EDUCATION', 'SEX', 'MARRIAGE']
+for col in cat_columns:
+    train_data[col] = train_data[col].astype('category')
+    test_data[col] = test_data[col].astype('category')
+
+
 #
 # Paso 2.
 # Divida los datasets en x_train, y_train, x_test, y_test.
@@ -155,17 +163,19 @@ pipeline = Pipeline([
 #
 
 param_grid = {
-    'model__C': [0.1, 1, 10,100],
-    'model__max_iter': [1000, 2000, 3000],
-    'model__solver': ['lbfgs', 'liblinear','saga'],
-    # 'model__penalty': ['l1', 'l2'],
-    'model__class_weight': ['balanced', None],
+    'model__C': [100, 120, 125, 150],
+    'model__max_iter': [1000, 1500, 2000],
+    # 'model__solver': ['liblinear','saga', 'newton-cg'],
+    # 'model__penalty': ['l2', 'l1'],
+    # 'model__class_weight': ['balanced', None],
     'select_k_best__k': [5, 10, 15, 20, 23]
 }
 
-model = GridSearchCV(pipeline, param_grid, cv=10, scoring='balanced_accuracy')
+model = GridSearchCV(pipeline, param_grid, cv=10, scoring='balanced_accuracy', verbose=1, n_jobs=-1)
 
 model.fit(x_train, y_train)
+
+print("Best parameters found: ", model.best_params_)
 
 # Paso 5.
 # Salve el modelo como "files/models/model.pkl".
