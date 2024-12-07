@@ -54,7 +54,7 @@ import pandas as pd
 from sklearn.model_selection import GridSearchCV 
 from sklearn.compose import ColumnTransformer 
 from sklearn.pipeline import Pipeline 
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler 
+from sklearn.preprocessing import OneHotEncoder, MinMaxScaler 
 from sklearn.linear_model import LogisticRegression
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.metrics import precision_score, balanced_accuracy_score, recall_score, f1_score, confusion_matrix
@@ -62,6 +62,7 @@ import pickle
 import numpy as np
 import os
 import json
+import gzip
 
 def clean_data(data_df):
     df=data_df.copy()
@@ -149,8 +150,8 @@ def save_model(model):
     # If the models directory does not exist, create it
     if not os.path.exists('files/models'):
         os.makedirs('files/models')
-    # Save the model
-    with open('files/models/model.pkl', 'wb') as f:
+    # Save the model with gzip
+    with gzip.open('files/models/model.pkl.gz', 'wb') as f:
         pickle.dump(model, f)
 
 
